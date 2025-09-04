@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Predicting Patient Recovery Time (KNN • UCI Medical Datasets)</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" />
+  <style>
+    :root {
+      --bg: #0f172a;        /* slate-900 */
+      --panel: #111827;     /* gray-900 */
+      --muted: #9ca3af;     /* gray-400 */
+      --text: #e5e7eb;      /* gray-200 */
+      --accent: #22d3ee;    /* cyan-400 */
+      --accent-2: #a78bfa;  /* violet-400 */
+      --ok: #34d399;        /* emerald-400 */
+      --warn: #fbbf24;      /* amber-400 */
+      --err: #f87171;       /* red-400 */
+      --card: #0b1220;      /* deep slate */
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 16px;
+    }
+    html, body { height: 100%; }
+    body {
+      background: radial-gradient(1200px 800px at 20% -10%, rgba(167,139,250,.15), transparent 70%),
+                  radial-gradient(1000px 600px at 120% 10%, rgba(34,211,238,.12), transparent 60%),
+                  var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      line-height: 1.5;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    header {
+      display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom: 16px;
+    }
+    .badge { padding:4px 8px; border-radius: 999px; background: rgba(167,139,250,.12); color:#e9d5ff; border:1px solid rgba(167,139,250,.35); font-size: 12px; }
+    .container { display:grid; grid-template-columns: 340px 1fr; gap: 20px; }
+    @media (max-width: 900px){ .container{ grid-template-columns:1fr; } }
+
+    .panel { background: rgba(17,24,39,.75); border:1px solid rgba(255,255,255,.06); border-radius: var(--radius); box-shadow: var(--shadow); overflow:hidden; }
+    .panel h2{ font-size: 18px; margin:0 0 10px; }
+    .panel .body{ padding:16px; }
+
+    .controls { display:flex; flex-direction:column; gap:14px; }
+    label { display:block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    input[type="number"], select, button, input[type="text"]{
+      width:100%; box-sizing:border-box; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.1);
+      background: #0b1220; color: var(--text);
+    }
+    button{ cursor:pointer; background: linear-gradient(135deg, rgba(34,211,238,.2), rgba(167,139,250,.2)); border-color: rgba(167,139,250,.35); }
+    button.primary{ background: linear-gradient(135deg, rgba(34,211,238,.35), rgba(167,139,250,.35)); font-weight:600; }
+    button:disabled{ opacity:.6; cursor:not-allowed; }
+
+    .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    .grid-3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; }
+
+    .row { display:flex; gap:10px; align-items:center; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .ok { color: var(--ok) }
+    .warn { color: var(--warn) }
+    .err { color: var(--err) }
+
+    .results { display:grid; gap:16px; }
+    .stat { background: linear-gradient(135deg, rgba(34,211,238,.08), rgba(167,139,250,.05)); border:1px dashed rgba(34,211,238,.35); border-radius: 14px; padding:12px; display:flex; justify-content:space-between; align-items:center; }
+    .stat .label{ color: var(--muted); font-size: 12px; }
+    .stat .value{ font-size: 22px; font-weight: 700; }
+
+    table { width:100%; border-collapse: collapse; font-size: 12.5px; }
+    th, td { text-align:left; padding:8px 10px; border-bottom: 1px dashed rgba(255,255,255,.06); }
+    th { color: var(--muted); font-weight:600; }
+
+    .chips { display:flex; flex-wrap:wrap; gap:8px; }
+    .chip { border:1px solid rgba(255,255,255,.12); color: #c7d2fe; background: rgba(99,102,241,.08); padding:6px 10px; border-radius:999px; font-size: 12px; }
+
+    .banner { padding:10px 12px; border-radius: 12px; border:1px dashed rgba(251,191,36,.5); background: rgba(251,191,36,.08); color:#fde68a; }
+    .hidden { display:none !important; }
+
+    canvas { width:100%; height: 240px; background: #0b1220; border-radius: 12px; border:1px solid rgba(255,255,255,.06); }
+    footer { margin-top: 16px; font-size: 12px; color: var(--muted); }
+    code { background: rgba(255,255,255,.06); padding: 2px 6px; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 style="margin:0; font-size: 22px; font-weight:800; letter-spacing:.2px;">Predicting Patient Recovery Time&nbsp;<span class="muted">(KNN)</span></h1>
+    <span class="badge">UCI Medical Datasets (Classic but Real)</span>
+  </header>
+
+  <div class="container">
+    <!-- LEFT: Controls -->
+    <div class="panel">
+      <div class="body controls">
+        <h2>Controls</h2>
+        <div class="grid-2">
+          <div>
+            <label>Dataset</label>
+            <select id="datasetSelect">
+              <option value="diabetes">Diabetes (time_in_hospital → recovery proxy)</option>
+              <option value="heart">Heart Disease (no recovery target)</option>
+            </select>
+          </div>
+          <div>
+            <label>k (neighbors)</label>
+            <input type="number" id="kInput" min="1" max="25" step="1" value="7" />
+          </div>
+        </div>
+
+        <div id="datasetStatus" class="muted"></div>
+
+        <div class="grid-2">
+          <button id="loadBtn" class="primary">Load Dataset</button>
+          <label for="fileInput" style="display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:10px 12px; background: #0b1220;">
+            <span>Or choose CSV…</span>
+            <input id="fileInput" type="file" accept=".csv" style="display:none" />
+          </label>
+        </div>
+
+        <div id="noTargetBanner" class="banner hidden">Selected dataset has no recovery duration target. Predictions are disabled.</div>
+
+        <hr style="border:none; border-top:1px dashed rgba(255,255,255,.08);" />
+        <h2>Enter New Patient</h2>
+        <div class="grid-2">
+          <div>
+            <label>Age (years)</label>
+            <input type="number" id="ageInput" min="1" max="110" step="1" value="55" />
+          </div>
+          <div>
+            <label>Weight (lbs) <span class="muted">(proxy for BMI)</span></label>
+            <input type="number" id="weightInput" min="40" max="500" step="1" value="180" />
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label>Glycemic severity proxy</label>
+            <select id="severityInput" title="Uses A1Cresult or max_glu_serum when BP is unavailable in dataset">
+              <option value="0">None</option>
+              <option value="1">Normal</option>
+              <option value="2">Elevated</option>
+              <option value="3">High</option>
+            </select>
+          </div>
+          <div>
+            <label>Condition category</label>
+            <select id="condInput"></select>
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="predictBtn" class="primary">Predict Recovery</button>
+          <div id="predictMsg" class="muted"></div>
+        </div>
+
+        <div>
+          <label>Active Features</label>
+          <div id="activeFeatures" class="chips"></div>
+        </div>
+
+        <div class="muted" style="font-size:12px;">
+          <strong>How to use</strong><br/>
+          1) Place <code>diabetic_data.csv</code> (and optionally <code>heart.csv</code>) next to this <code>index.html</code>.<br/>
+          2) Open with Live Server. 3) Load dataset, set k, enter patient attributes, click Predict.
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Results -->
+    <div class="results">
+      <div class="panel">
+        <div class="body">
+          <h2>Model Summary</h2>
+          <div class="grid-3">
+            <div class="stat"><div><div class="label">Rows (train)</div><div id="rowsTrain" class="value">–</div></div><span class="muted">after cleaning</span></div>
+            <div class="stat"><div><div class="label">Rows (validation)</div><div id="rowsVal" class="value">–</div></div><span class="muted">20% split</span></div>
+            <div class="stat"><div><div class="label">Validation MAE</div><div id="mae" class="value">–</div></div><span class="muted">days</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="body">
+          <h2>Prediction</h2>
+          <div class="grid-2">
+            <div class="stat" style="grid-column: span 2;">
+              <div>
+                <div class="label">Predicted recovery</div>
+                <div id="predOut" class="value">–</div>
+              </div>
+              <div class="muted">target: <code>time_in_hospital</code></div>
+            </div>
+          </div>
+          <canvas id="chart" width="800" height="260"></canvas>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="body">
+          <h2>Nearest Neighbors</h2>
+          <div class="muted" id="nnInfo">–</div>
+          <div style="overflow:auto; max-height: 320px;">
+            <table id="nnTable">
+              <thead>
+                <tr id="nnHead"><th>#</th><th>time_in_hospital</th><th>age</th><th>weight</th><th>severity</th><th>condition</th></tr>
+              </thead>
+              <tbody id="nnBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <footer>
+        Educational demo only. Not medical advice. UCI datasets may lack true recovery time; <code>time_in_hospital</code> is used as a proxy.
+      </footer>
+    </div>
+  </div>
+
+  <!-- Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <script>
+    // ------------------------------
+    // Utilities
+    // ------------------------------
+    const $ = (sel) => document.querySelector(sel);
+    const $all = (sel) => Array.from(document.querySelectorAll(sel));
+
+    // Seeded RNG (Mulberry32)
+    function rng(seed=42){
+      let t = seed >>> 0;
+      return function(){
+        t += 0x6D2B79F5;
+        let r = Math.imul(t ^ t >>> 15, 1 | t);
+        r ^= r + Math.imul(r ^ r >>> 7, 61 | r);
+        return ((r ^ r >>> 14) >>> 0) / 4294967296;
+      }
+    }
+
+    function shuffleInPlace(arr, seed=42){
+      const rand = rng(seed);
+      for(let i = arr.length - 1; i > 0; i--){
+        const j = Math.floor(rand()* (i+1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function pretty(num, digits=1){
+      if(Number.isNaN(num) || !Number.isFinite(num)) return '–';
+      return Number(num).toFixed(digits);
+    }
+
+    // ------------------------------
+    // Schema & Feature Engineering (Diabetes)
+    // ------------------------------
+    const CONDITION_CATEGORIES = [
+      { code: 1, name: 'Infectious (001–139)' },
+      { code: 2, name: 'Neoplasms (140–239)' },
+      { code: 3, name: 'Endocrine/Diabetes (240–279; 250)' },
+      { code: 4, name: 'Blood diseases (280–289)' },
+      { code: 5, name: 'Mental (290–319)' },
+      { code: 6, name: 'Nervous system (320–389)' },
+      { code: 7, name: 'Circulatory (390–459, 785)' },
+      { code: 8, name: 'Respiratory (460–519)' },
+      { code: 9, name: 'Digestive (520–579)' },
+      { code:10, name: 'Genitourinary (580–629)' },
+      { code:11, name: 'Pregnancy (630–679)' },
+      { code:12, name: 'Skin (680–709)' },
+      { code:13, name: 'Musculoskeletal (710–739)' },
+      { code:14, name: 'Congenital (740–759)' },
+      { code:15, name: 'Perinatal (760–779)' },
+      { code:16, name: 'Symptoms (780–784)' },
+      { code:17, name: 'Injury/Poisoning (800–999)' },
+      { code:18, name: 'Other/External (E/V codes)' }
+    ];
+
+    function populateConditionSelect(){
+      const sel = $('#condInput');
+      sel.innerHTML = '';
+      for(const c of CONDITION_CATEGORIES){
+        const opt = document.createElement('option');
+        opt.value = String(c.code);
+        opt.textContent = c.name;
+        sel.appendChild(opt);
+      }
+      sel.value = '3'; // default Endocrine/Diabetes
+    }
+
+    function ageBinToMidpoint(s){
+      // e.g., "[50-60)" → 55
+      if(!s || typeof s !== 'string') return NaN;
+      const m = s.match(/\[(\d+)-(\d+)\)/);
+      if(m){
+        const a = Number(m[1]);
+        const b = Number(m[2]);
+        return (a + b) / 2;
+      }
+      return NaN;
+    }
+
+    function weightBinToMidpoint(s){
+      // e.g., "[75-100)" → 87.5; ">200" → 210
+      if(!s || typeof s !== 'string') return NaN;
+      if(s.startsWith('>')){
+        const v = Number(s.replace('>',''));
+        return Number.isFinite(v) ? v + 10 : 210;
+      }
+      const m = s.match(/\[(\d+)-(\d+)\)/);
+      if(m){
+        const a = Number(m[1]);
+        const b = Number(m[2]);
+        return (a + b) / 2;
+      }
+      return NaN;
+    }
+
+    function mapA1C(s){
+      // None=0, Norm=1, >7=2, >8=3
+      if(!s || s==='?' ) return NaN;
+      const t = String(s).toLowerCase();
+      if(t.includes('none')) return 0;
+      if(t.includes('norm')) return 1;
+      if(t.includes('>8')) return 3;
+      if(t.includes('>7')) return 2;
+      return NaN;
+    }
+
+    function mapMaxGlu(s){
+      // None=0, Norm=1, >200=2, >300=3
+      if(!s || s==='?' ) return NaN;
+      const t = String(s).toLowerCase();
+      if(t.includes('none')) return 0;
+      if(t.includes('norm')) return 1;
+      if(t.includes('>300')) return 3;
+      if(t.includes('>200')) return 2;
+      return NaN;
+    }
+
+    function icd9ToCategory(diag){
+      if(!diag || diag==='?') return 18; // Other
+      const s = String(diag).trim().toUpperCase();
+      if(s[0]==='E' || s[0]==='V') return 18;
+      const n = parseInt(s, 10);
+      if(!Number.isFinite(n)) return 18;
+      if(n===250) return 3; // diabetes
+      if(n>=1 && n<=139) return 1;
+      if(n>=140 && n<=239) return 2;
+      if(n>=240 && n<=279) return 3;
+      if(n>=280 && n<=289) return 4;
+      if(n>=290 && n<=319) return 5;
+      if(n>=320 && n<=389) return 6;
+      if((n>=390 && n<=459) || n===785) return 7;
+      if(n>=460 && n<=519) return 8;
+      if(n>=520 && n<=579) return 9;
+      if(n>=580 && n<=629) return 10;
+      if(n>=630 && n<=679) return 11;
+      if(n>=680 && n<=709) return 12;
+      if(n>=710 && n<=739) return 13;
+      if(n>=740 && n<=759) return 14;
+      if(n>=760 && n<=779) return 15;
+      if(n>=780 && n<=784) return 16;
+      if(n>=800 && n<=999) return 17;
+      return 18;
+    }
+
+    // Convert a diabetes CSV row into our numeric feature vector & target
+    function diabetesRowToXY(row){
+      const age = ageBinToMidpoint(row.age);
+      const weight = row.weight && row.weight!=="?" ? weightBinToMidpoint(row.weight) : NaN;
+      const a1c = mapA1C(row.A1Cresult);
+      const glu = mapMaxGlu(row.max_glu_serum);
+      const severity = Number.isFinite(a1c) ? a1c : (Number.isFinite(glu) ? glu : NaN);
+      const condition = icd9ToCategory(row.diag_1);
+      const y = Number(row.time_in_hospital);
+
+      const x = [];
+      const names = [];
+      if(Number.isFinite(age)) { x.push(age); names.push('age'); }
+      if(Number.isFinite(weight)) { x.push(weight); names.push('weight'); }
+      if(Number.isFinite(severity)) { x.push(severity); names.push('severity'); }
+      if(Number.isFinite(condition)) { x.push(condition); names.push('condition'); }
+
+      const complete = names.length>=2 && Number.isFinite(y);
+      return {x, y, names, raw:{age, weight, severity, condition, y}};
+    }
+
+    // For the new patient, map UI inputs into the same feature order used by train set
+    function uiToFeatureVector(activeNames){
+      const age = Number($('#ageInput').value);
+      const weight = Number($('#weightInput').value);
+      const sev = Number($('#severityInput').value);
+      const cond = Number($('#condInput').value);
+
+      // Snap to diabetes bins for consistency
+      const ageMid = ageToDiabetesBinMid(age);
+      const weightMid = weightToDiabetesBinMid(weight);
+
+      const dict = { age: ageMid, weight: weightMid, severity: sev, condition: cond };
+      const vec = activeNames.map(n => dict[n]);
+      return vec;
+    }
+
+    function ageToDiabetesBinMid(age){
+      const bins = [[0,10],[10,20],[20,30],[30,40],[40,50],[50,60],[60,70],[70,80],[80,90],[90,100]];
+      for(const [a,b] of bins){ if(age>=a && age<b) return (a+b)/2; }
+      return 50; // fallback
+    }
+    function weightToDiabetesBinMid(w){
+      const bins = [[0,25],[25,50],[50,75],[75,100],[100,125],[125,150],[150,175],[175,200]];
+      for(const [a,b] of bins){ if(w>=a && w<b) return (a+b)/2; }
+      if(w>=200) return 210; // >200
+      return 87.5; // fallback
+    }
+
+    // ------------------------------
+    // Standardization (Z-score)
+    // ------------------------------
+    function standardize(trainX, testX){
+      const d = trainX[0].length;
+      const means = new Array(d).fill(0);
+      const stds  = new Array(d).fill(0);
+
+      // means
+      for(let j=0;j<d;j++){
+        let s = 0;
+        for(let i=0;i<trainX.length;i++) s += trainX[i][j];
+        means[j] = s / trainX.length;
+      }
+      // stds
+      for(let j=0;j<d;j++){
+        let s = 0;
+        for(let i=0;i<trainX.length;i++){
+          const diff = trainX[i][j] - means[j];
+          s += diff*diff;
+        }
+        stds[j] = Math.sqrt(s / Math.max(1, trainX.length-1)) || 1;
+      }
+      const scale = (X) => X.map(row => row.map((v,j)=> (v - means[j]) / stds[j]));
+      return { Xtrain: scale(trainX), Xtest: testX ? scale(testX) : null, means, stds };
+    }
+
+    function transformOne(x, means, stds){
+      return x.map((v,j)=> (v - means[j]) / stds[j]);
+    }
+
+    // ------------------------------
+    // KNN (Euclidean, regression)
+    // ------------------------------
+    function distance(a,b){
+      let s=0; for(let i=0;i<a.length;i++){ const d=a[i]-b[i]; s+=d*d; } return Math.sqrt(s);
+    }
+
+    function knnPredict(x, Xtrain, ytrain, k){
+      const dists = Xtrain.map((row,i)=> ({i, d: distance(x,row)}));
+      dists.sort((a,b)=> a.d - b.d);
+      const ksel = dists.slice(0, Math.max(1, Math.min(k, dists.length)));
+      const pred = ksel.reduce((acc, o)=> acc + ytrain[o.i], 0) / ksel.length;
+      const idxs = ksel.map(o=> o.i);
+      return {pred, idxs};
+    }
+
+    function evaluateMAE(Xval, yval, Xtrain, ytrain, k){
+      let s=0; const n = Xval.length;
+      for(let i=0;i<n;i++){
+        const {pred} = knnPredict(Xval[i], Xtrain, ytrain, k);
+        s += Math.abs(pred - yval[i]);
+      }
+      return s / Math.max(1, n);
+    }
+
+    // ------------------------------
+    // State
+    // ------------------------------
+    const state = {
+      dataset: 'diabetes',
+      rawRows: [],
+      featureNames: [],
+      Xtrain: [], ytrain: [], Xval: [], yval: [],
+      means: [], stds: [],
+      activeNames: [],
+      hasTarget: false,
+      sampleLimit: 20000, // to keep it responsive in browser
+    };
+
+    // ------------------------------
+    // Dataset loading
+    // ------------------------------
+    async function loadDataset(which, file){
+      state.dataset = which;
+      $('#datasetStatus').textContent = 'Loading…';
+      $('#predictBtn').disabled = true;
+      $('#noTargetBanner').classList.add('hidden');
+
+      let csvText = '';
+      try {
+        if(file){
+          csvText = await file.text();
+        } else {
+          const url = which === 'diabetes' ? 'diabetic_data.csv' : 'heart.csv';
+          const res = await fetch(url, {cache:'no-store'});
+          if(!res.ok) throw new Error('Fetch failed');
+          csvText = await res.text();
+        }
+      } catch(err){
+        $('#datasetStatus').innerHTML = `Could not fetch CSV automatically. Use <strong>Choose CSV…</strong> to load it.`;
+        console.error(err);
+        return;
+      }
+
+      Papa.parse(csvText, {
+        header: true, dynamicTyping: false, skipEmptyLines: true,
+        worker: true,
+        complete: (res)=> {
+          $('#datasetStatus').textContent = `Parsed ${res.data.length.toLocaleString()} rows.`;
+          state.rawRows = res.data;
+          prepareData();
+        },
+        error: (err)=>{
+          $('#datasetStatus').textContent = 'Parse error';
+          console.error(err);
+        }
+      });
+    }
+
+    function prepareData(){
+      const rows = state.rawRows;
+      const isDiab = state.dataset==='diabetes';
+      const xy = [];
+
+      if(isDiab){
+        for(const r of rows){
+          if(r.time_in_hospital && r.age){
+            const rec = diabetesRowToXY(r);
+            if(rec && rec.x.length>=2 && Number.isFinite(rec.y)) xy.push(rec);
+          }
+        }
+        state.hasTarget = true;
+      } else {
+        // Heart dataset demo – no target
+        state.hasTarget = false;
+      }
+
+      if(!state.hasTarget){
+        $('#noTargetBanner').classList.remove('hidden');
+        $('#predictBtn').disabled = true;
+        $('#rowsTrain').textContent = '–';
+        $('#rowsVal').textContent = '–';
+        $('#mae').textContent = '–';
+        renderActiveFeatures([]);
+        return;
+      }
+
+      // Determine most common feature name set (to standardize order)
+      const nameCount = new Map();
+      for(const rec of xy){
+        const key = rec.names.join('|');
+        nameCount.set(key, (nameCount.get(key)||0)+1);
+      }
+      let bestKey = '';
+      let bestCnt = -1;
+      for(const [k,c] of nameCount.entries()){
+        if(c>bestCnt){ bestCnt=c; bestKey = k; }
+      }
+      const activeNames = bestKey ? bestKey.split('|') : ['age','weight','severity','condition'];
+      state.activeNames = activeNames;
+
+      // Materialize X,y for rows that have exactly these features
+      const X = []; const y = []; const raws = [];
+      for(const rec of xy){
+        if(rec.names.join('|')===bestKey){ X.push(rec.x); y.push(rec.y); raws.push(rec.raw); }
+      }
+
+      // Sample down if huge
+      let idxs = X.map((_,i)=>i);
+      shuffleInPlace(idxs, 42);
+      if(X.length > state.sampleLimit){ idxs = idxs.slice(0, state.sampleLimit); }
+      const Xs = idxs.map(i=> X[i]);
+      const ys = idxs.map(i=> y[i]);
+      const rawsS = idxs.map(i=> raws[i]);
+
+      // Train/val split 80/20
+      const n = Xs.length;
+      const nTrain = Math.max(1, Math.floor(n*0.8));
+      const trainIdx = idxs.slice(0, nTrain);
+      const valIdx   = idxs.slice(nTrain);
+
+      const Xtrain = Xs.slice(0, nTrain);
+      const ytrain = ys.slice(0, nTrain);
+      const Xval   = Xs.slice(nTrain);
+      const yval   = ys.slice(nTrain);
+
+      const {Xtrain: Xtr, Xtest: Xva, means, stds} = standardize(Xtrain, Xval);
+
+      state.Xtrain = Xtr;
+      state.ytrain = ytrain;
+      state.Xval   = Xva;
+      state.yval   = yval;
+      state.means  = means;
+      state.stds   = stds;
+
+      $('#rowsTrain').textContent = Xtr.length.toLocaleString();
+      $('#rowsVal').textContent = Xva.length.toLocaleString();
+      renderActiveFeatures(activeNames);
+
+      // Compute initial MAE
+      const k = Number($('#kInput').value);
+      const mae = evaluateMAE(state.Xval, state.yval, state.Xtrain, state.ytrain, k);
+      $('#mae').textContent = pretty(mae, 2);
+      $('#predictBtn').disabled = false;
+    }
+
+    function renderActiveFeatures(names){
+      const wrap = $('#activeFeatures');
+      wrap.innerHTML = '';
+      for(const n of names){
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.textContent = n;
+        wrap.appendChild(chip);
+      }
+    }
+
+    // ------------------------------
+    // Prediction & Rendering
+    // ------------------------------
+    function predict(){
+      if(!state.hasTarget){
+        $('#predictMsg').textContent = 'No target in current dataset.';
+        return;
+      }
+      const k = Math.max(1, Math.min(25, Number($('#kInput').value)||7));
+      $('#kInput').value = String(k);
+
+      const xRaw = uiToFeatureVector(state.activeNames);
+      if(xRaw.some(v=> !Number.isFinite(v))){
+        $('#predictMsg').textContent = 'Please fill all inputs.';
+        return;
+      }
+      const x = transformOne(xRaw, state.means, state.stds);
+      const {pred, idxs} = knnPredict(x, state.Xtrain, state.ytrain, k);
+      $('#predOut').textContent = `${pretty(pred,2)} days`;
+      $('#predictMsg').textContent = `Averaged over ${k} most similar patients.`;
+
+      // Recompute MAE for current k
+      const mae = evaluateMAE(state.Xval, state.yval, state.Xtrain, state.ytrain, k);
+      $('#mae').textContent = pretty(mae, 2);
+
+      renderNeighbors(idxs);
+      renderChart(idxs, pred);
+    }
+
+    function renderNeighbors(idxs){
+      const headRow = $('#nnHead');
+      headRow.innerHTML = '<th>#</th><th>time_in_hospital</th>' + state.activeNames.map(n=>`<th>${n}</th>`).join('');
+
+      const tbody = $('#nnBody');
+      tbody.innerHTML = '';
+      for(let r=0; r<idxs.length; r++){
+        const i = idxs[r];
+        const y = state.ytrain[i];
+        // Reconstruct raw-ish features from standardized is hard; we keep raw in training prep minimalistic; here just show standardized back-meaned approximation
+        // For simplicity, show back-transformed approx:
+        const feats = state.Xtrain[i].map((v,j)=> v * state.stds[j] + state.means[j]);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${r+1}</td><td>${y}</td>` + feats.map(v=>`<td>${pretty(v,1)}</td>`).join('');
+        tbody.appendChild(tr);
+      }
+      $('#nnInfo').textContent = `${idxs.length} neighbors shown.`;
+    }
+
+    function renderChart(idxs, pred){
+      const canvas = $('#chart');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0,0,canvas.width, canvas.height);
+
+      const padding = {l:40, r:10, t:10, b:28};
+      const W = canvas.width - padding.l - padding.r;
+      const H = canvas.height - padding.t - padding.b;
+
+      // Y scale from min/max of neighbor true y plus some margin
+      const ys = idxs.map(i=> state.ytrain[i]);
+      const yMin = Math.min(...ys, pred) - 1;
+      const yMax = Math.max(...ys, pred) + 1;
+      const yToPix = y => padding.t + H - ( (y - yMin) / (yMax - yMin) ) * H;
+
+      // Axes
+      ctx.strokeStyle = 'rgba(255,255,255,.2)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padding.l, padding.t);
+      ctx.lineTo(padding.l, padding.t+H);
+      ctx.lineTo(padding.l+W, padding.t+H);
+      ctx.stroke();
+
+      // X: ranks 1..k
+      const k = idxs.length;
+      const xToPix = (rank)=> padding.l + ( (rank-1) / Math.max(1,k-1) ) * W;
+
+      // Neighbor points
+      ctx.fillStyle = 'rgba(34,211,238,.9)';
+      for(let r=1; r<=k; r++){
+        const yv = state.ytrain[idxs[r-1]];
+        const x = xToPix(r);
+        const y = yToPix(yv);
+        ctx.beginPath();
+        ctx.arc(x,y,3,0,Math.PI*2);
+        ctx.fill();
+      }
+
+      // Prediction line
+      ctx.strokeStyle = 'rgba(167,139,250,.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const yp = yToPix(pred);
+      ctx.moveTo(padding.l, yp);
+      ctx.lineTo(padding.l+W, yp);
+      ctx.stroke();
+
+      // Labels
+      ctx.fillStyle = 'rgba(255,255,255,.6)';
+      ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+      ctx.fillText('Neighbor rank', padding.l + W/2 - 40, padding.t+H+22);
+      ctx.save();
+      ctx.translate(12, padding.t + H/2 + 30);
+      ctx.rotate(-Math.PI/2);
+      ctx.fillText('time_in_hospital (days)', 0,0);
+      ctx.restore();
+    }
+
+    // ------------------------------
+    // Events
+    // ------------------------------
+    window.addEventListener('DOMContentLoaded', ()=>{
+      populateConditionSelect();
+      $('#loadBtn').addEventListener('click', ()=> loadDataset($('#datasetSelect').value));
+      $('#fileInput').addEventListener('change', (e)=>{
+        const f = e.target.files && e.target.files[0];
+        if(!f) return;
+        // Guess dataset by filename
+        const name = f.name.toLowerCase();
+        const which = name.includes('diab') ? 'diabetes' : (name.includes('heart') ? 'heart' : $('#datasetSelect').value);
+        $('#datasetSelect').value = which;
+        loadDataset(which, f);
+      });
+      $('#kInput').addEventListener('change', ()=>{
+        if(state.Xval.length){
+          const k = Math.max(1, Math.min(25, Number($('#kInput').value)||7));
+          const mae = evaluateMAE(state.Xval, state.yval, state.Xtrain, state.ytrain, k);
+          $('#mae').textContent = pretty(mae, 2);
+        }
+      });
+      $('#predictBtn').addEventListener('click', predict);
+
+      // Attempt auto-load diabetes on start (if CSV is present)
+      loadDataset('diabetes').catch(()=>{});
+    });
+  </script>
+</body>
+</html>
